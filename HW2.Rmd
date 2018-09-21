@@ -1,6 +1,6 @@
 ---
 title: "HW2 STA521 Fall18"
-author: '[Your Name Here, netid and github username here]'
+author: '[Lingxi Song]'
 date: "Due September 23, 2018 5pm"
 output:
   pdf_document: default
@@ -15,6 +15,10 @@ Readings: Chapters 3-4 in Weisberg Applied Linear Regression
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(GGally)
+library(ggplot2)
+library(car)
+library(dplyr)
 ```
 
 This exercise involves the UN data set from `alr3` package. Install `alr3` and the `car` packages and load the data to answer the following questions adding your code in the code chunks.  Please add appropriate code to the chunks to suppress messages and warnings as needed once you are sure the code is working properly and remove instructions if no longer needed. Figures should have informative captions. Please switch the output to pdf for your final version to upload to Sakai. **Remove these instructions for final submission**
@@ -33,15 +37,22 @@ library(car)
 
 
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
-
+As illustrated by the R result,6 variables (ModernC,Change,PPgdp,Frate,Pop,Fertility) have missing data. All the variables are quantitative. 
 ```{r}
-
+summary(UN3)
+apply(UN3, 2, anyNA)
+apply(UN3,2,is.numeric)
 ```
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
 ```{r}
-
+mstable<-matrix(nrow=ncol(UN3),ncol = 3)
+colnames(mstable)<-c("variable","mean","stanard deviation")
+mstable[,1]<-colnames(UN3)
+mstable[,2]<-apply(UN3,2,function(x){mean(x,na.rm=TRUE)})
+mstable[,3]<-apply(UN3,2,function(x){sd(x,na.rm=TRUE)})
+knitr::kable(mstable)
 ```
 
 
@@ -50,7 +61,8 @@ highlighting the relationships among the predictors. Comment
 on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
 
 ```{r}
-
+ggp<-ggpairs(na.omit(UN3))
+ggp
 ```
 
 ## Model Fitting
@@ -58,44 +70,68 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 4.  Use the `lm()` function to perform a multiple linear regression with `ModernC` as the response and all other variables as the predictors, using the formula `ModernC ~ .`, where the `.` includes all remaining variables in the dataframe.  Create  diagnostic residual plot from the linear model object and comment on results regarding assumptions.  How many observations are used in your model fitting?
 
 ```{r}
+modernc.lm<-lm(ModernC~.,data=na.omit(UN3))
+summary(modernc.lm)
+#studentized Breusch-Pagan test
+lmtest::bptest(modernc.lm)
+```
 
+```{r}
+par(mfrow=c(2,2))
+plot(modernc.lm,ask=FALSE)
 ```
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
 
 ```{r}
-
+avPlots(modernc.lm)
 ```
 
 6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
 
 
 ```{r}
+UN3_nao<-na.omit(UN3)
+# I searched how to use the powertransform() on github, so I don't know how as.matrix works 
+summary(powerTransform(cbind(PPgdp,Pop,Fertility,Purban,Change,Frate)~.,family="yjPower",data = UN3_nao))
 
 ```
+
+Instead of BoxTidewell, we can use powerTransform function to figure out the power of predictors. By adding yjPower we can deal with the negative values in "Change".Accorcing to the output, Fertility,PPgdp and Pop have lambda values other than 1, so power transformation is needed. Our model is now:
+$ModernC\sim Change+log(PPgdp)+Frate+log(Pop)+log(Fertility)+Purban$
+
 
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
-
-
 ```{r}
-
+boxCox(modernc.lm, lambda = seq(-2, 2, 1/10))
 ```
+To reach the max likelihood, $\lambda\in[0.8,1]$. But for interpretation, we can choose $\lambda=1$(no transformation of ModernC). 
+
 
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
-
-9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
-
-
 ```{r}
-
+modernc.lm.2<-lm(ModernC~Purban+Frate+Change+I(log(Pop))+I(log(Fertility))+I(log(PPgdp)),data=UN3_nao)
+summary(modernc.lm.2)
+par(mfrow=c(2,2))
+plot(modernc.lm.2,ask=FALSE)
+avPlots(modernc.lm.2)
 ```
+
+
+9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?  
+
+
+I end up with the same model in question 8.
+
 
 10.  Are there any outliers or influential points in the data?  Explain.  If so, refit the model after removing any outliers and comment on residual plots.
 
 
 ```{r}
-
+outlierTest(modernc.lm.2)
+influencePlot(modernc.lm.2)
 ```
+The function outlierTest() and influencePlot() provide a quick way to do this. Even if the point Poland has an unadjusted p-value of 0.0036, the Bonferonni P (equals to the unadjusted P multiplies observation number) is larger than 0.05. Therefore, we can't reject the $H_0$: There are no outliers in the data. And it's obvious from the plot that China, Poland, Kuwait and Cook.islands are influencial points. So we don't have to refit our final model.
 
 ## Summary of Results
 
@@ -111,7 +147,7 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 
 
 ```{r}
-
+summary(modernc.lm.2)
 ```
 
 

@@ -4,6 +4,7 @@ author: '[Lingxi Song]'
 date: "Due September 23, 2018 5pm"
 output:
   pdf_document: default
+  word_document: default
   html_document:
     df_print: paged
 ---
@@ -21,28 +22,22 @@ library(car)
 library(dplyr)
 ```
 
-This exercise involves the UN data set from `alr3` package. Install `alr3` and the `car` packages and load the data to answer the following questions adding your code in the code chunks.  Please add appropriate code to the chunks to suppress messages and warnings as needed once you are sure the code is working properly and remove instructions if no longer needed. Figures should have informative captions. Please switch the output to pdf for your final version to upload to Sakai. **Remove these instructions for final submission**
-
-
 ## Exploratory Data Analysis
-
-0.  Preliminary read in the data.  After testing, modify the code chunk so that output, messages and warnings are suppressed.  *Exclude text from final*
-
-```{r data}
+```{r data, include=FALSE}
 library(alr3)
 data(UN3, package="alr3")
 help(UN3) 
 library(car)
 ```
 
-
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
-As illustrated by the R result,6 variables (ModernC,Change,PPgdp,Frate,Pop,Fertility) have missing data. All the variables are quantitative. 
+
 ```{r}
 summary(UN3)
 apply(UN3, 2, anyNA)
 apply(UN3,2,is.numeric)
 ```
+As illustrated by the R result,6 variables (ModernC,Change,PPgdp,Frate,Pop,Fertility) have missing data. All the variables are quantitative.      
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
@@ -56,14 +51,15 @@ knitr::kable(mstable)
 ```
 
 
-3. Investigate the predictors graphically, using scatterplots or other tools of your choice. Create some plots
-highlighting the relationships among the predictors. Comment
+3. Investigate the predictors graphically, using scatterplots or other tools of your choice. Create some plots highlighting the relationships among the predictors. Comment
 on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
 
 ```{r}
 ggp<-ggpairs(na.omit(UN3))
 ggp
 ```
+From correlation coefficient we can guess purban,fertility, ppdgp, and change are useful in predicting modernC.Also the scatter plot of Frate and PPgdp doesn't seem so linear, so transformation may needed. The scatter plots of Fertility and Purban show there may be high leverage points and we can only see potential outliers from Pop.   
+
 
 ## Model Fitting
 
@@ -80,43 +76,52 @@ lmtest::bptest(modernc.lm)
 par(mfrow=c(2,2))
 plot(modernc.lm,ask=FALSE)
 ```
+\
+I used 125 observations because na.omit function deleted some. As the first and third plots suggest, residual is not random. Also, the Normal Q-Q plot is not a straight 45-degree line, indicating a right tail. The last graph shows China and Indias have high leverage, so they have the potential to be influencial points. However, no points have cook's distance bigger than 1. We need to do further tests and transformations.\
 
-5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
+5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms? 
 
 ```{r}
 avPlots(modernc.lm)
 ```
+The avplot for Pop shows clearly that a transformation is needed and the locality seems to be China and India.\
+From avplot for Change, it seems that there are 4 localities: Cook's Island,Kuwaito,Azerbaijian and Poland.\
+From avplot for PPgdp, it seems that there are 2 localities: Switzerland and Norway.\
+From avplot for Fertility, it seems that there are 2 localities: Thailand and Nigero.\
+From avplot for Purban, it seems that there are 2 localities: Thailand and Sri.Lanka.
 
+\
 6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
 
 
 ```{r}
 UN3_nao<-na.omit(UN3)
-# I searched how to use the powertransform() on github, so I don't know how as.matrix works 
-summary(powerTransform(cbind(PPgdp,Pop,Fertility,Purban,Change,Frate)~.,family="yjPower",data = UN3_nao))
+summary(powerTransform(cbind(PPgdp,Pop,Fertility,Purban,Change,Frate)~.,
+                       family="yjPower",data = UN3_nao))
 
 ```
 
-Instead of BoxTidewell, we can use powerTransform function to figure out the power of predictors. By adding yjPower we can deal with the negative values in "Change".Accorcing to the output, Fertility,PPgdp and Pop have lambda values other than 1, so power transformation is needed. Our model is now:
-$ModernC\sim Change+log(PPgdp)+Frate+log(Pop)+log(Fertility)+Purban$
-
+Instead of BoxTidewell, we can use powerTransform function to figure out the power of predictors. By adding yjPower we can deal with the negative values in "Change".Accorcing to the output, Fertility,PPgdp and Pop have lambda values other than 1. But Fertility is a "good" variable so far. So I will only do log() to Pop and PPgdp. Our model is now:
+$ModernC\sim Change+log(PPgdp)+Frate+log(Pop)+Fertility+Purban$\
 
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
 ```{r}
 boxCox(modernc.lm, lambda = seq(-2, 2, 1/10))
 ```
+\
 To reach the max likelihood, $\lambda\in[0.8,1]$. But for interpretation, we can choose $\lambda=1$(no transformation of ModernC). 
-
 
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
 ```{r}
-modernc.lm.2<-lm(ModernC~Purban+Frate+Change+I(log(Pop))+I(log(Fertility))+I(log(PPgdp)),data=UN3_nao)
+modernc.lm.2<-lm(ModernC~
+                Purban+Frate+Change+I(log(Pop))+Fertility+I(log(PPgdp)),
+                data=UN3_nao)
 summary(modernc.lm.2)
 par(mfrow=c(2,2))
 plot(modernc.lm.2,ask=FALSE)
 avPlots(modernc.lm.2)
 ```
-
+From the residual plots we see random distributrd variables and the Normal Q-Q plot is more likely a straight 45-degree line. The added variable plots show that log(Pop),log(PPgdp) are better than the original variables. After checking the plots we can say the model is satisfying.
 
 9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?  
 
@@ -131,7 +136,7 @@ I end up with the same model in question 8.
 outlierTest(modernc.lm.2)
 influencePlot(modernc.lm.2)
 ```
-The function outlierTest() and influencePlot() provide a quick way to do this. Even if the point Poland has an unadjusted p-value of 0.0036, the Bonferonni P (equals to the unadjusted P multiplies observation number) is larger than 0.05. Therefore, we can't reject the $H_0$: There are no outliers in the data. And it's obvious from the plot that China, Poland, Kuwait and Cook.islands are influencial points. So we don't have to refit our final model.
+The function outlierTest() and influencePlot() provide a quick way to do this. Even if the point Poland has an unadjusted p-value of 0.0036, the Bonferonni P (equals to the unadjusted P multiplies observation number) is larger than 0.05. Therefore, we can't reject the $H_0$: There are no outliers in the data. And it's obvious from the plot that Yeman, Poland, Kuwait and Cook.islands are influencial points. So we don't have to refit our final model.
 
 ## Summary of Results
 
@@ -139,9 +144,11 @@ The function outlierTest() and influencePlot() provide a quick way to do this. E
 
 
 ```{r}
-
+c<-confint(modernc.lm.2,level=0.95)
+knitr::kable(c)
 ```
-
+\
+95% confidence interval means the frequency of possible confidence intervals that contain the true value of the unknown parameter is 0.95.
 
 12. Provide a paragraph summarizing your final model  and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
@@ -154,7 +161,27 @@ summary(modernc.lm.2)
 ## Methodology
 
     
-13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
+13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept.
 
+$e_Y=\beta_0+\beta_1e_x$  
 
-14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+$\beta_0=\bar{e_Y}-\beta_1\bar{e_x}$(regression line passes through the center point)  
+
+since $\bar{e_Y}=\frac{1}{n}1_n^T (I - H)Y$,$\bar{e_x}=\frac{1}{n}1_n^T (I - H)X_i$  
+
+therefore,use the hint we can get  
+
+$\beta_0=\frac{1}{n}1_n^T (I - H)Y-\frac{1}{n}\beta_11_n^T (I - H)X_i=0$   
+\
+14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model.      
+```{r}
+e1<-residuals(lm(ModernC~Purban+Frate+Change+I(log(Pop))+I(log(PPgdp)),
+              data=UN3_nao))
+e2<-residuals(lm(Fertility~Purban+Frate+Change+I(log(Pop))+I(log(PPgdp)),
+              data=UN3_nao))
+test<-lm(e1~e2)
+summary(test)$coef
+summary(modernc.lm.2)$coef
+```
+We can use the variable log(Fertility) as an example to confirm the statement. As suggested above: coefficients have the same value -9.676, which means the same slope.
+
